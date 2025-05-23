@@ -341,85 +341,6 @@ const deleteDocumentStoreFileChunk = async (storeId: string, docId: string, chun
     }
 }
 
-const deleteVectorStoreFromStore = async (storeId: string) => {
-    try {
-        const appServer = getRunningExpressApp()
-        const componentNodes = appServer.nodesPool.componentNodes
-
-        const entity = await appServer.AppDataSource.getRepository(DocumentStore).findOneBy({
-            id: storeId
-        })
-        if (!entity) {
-            throw new InternalFlowiseError(StatusCodes.NOT_FOUND, `Document store ${storeId} not found`)
-        }
-
-        if (!entity.embeddingConfig) {
-            throw new InternalFlowiseError(StatusCodes.NOT_FOUND, `Embedding for Document store ${storeId} not found`)
-        }
-
-        if (!entity.vectorStoreConfig) {
-            throw new InternalFlowiseError(StatusCodes.NOT_FOUND, `Vector Store for Document store ${storeId} not found`)
-        }
-
-        if (!entity.recordManagerConfig) {
-            throw new InternalFlowiseError(
-                StatusCodes.NOT_FOUND,
-                `Record Manager for Document Store ${storeId} is needed to delete data from Vector Store`
-            )
-        }
-
-        const options: ICommonObject = {
-            chatflowid: storeId,
-            appDataSource: appServer.AppDataSource,
-            databaseEntities,
-            logger
-        }
-
-        // Get Record Manager Instance
-        const recordManagerConfig = JSON.parse(entity.recordManagerConfig)
-        const recordManagerObj = await _createRecordManagerObject(
-            componentNodes,
-            { recordManagerName: recordManagerConfig.name, recordManagerConfig: recordManagerConfig.config },
-            options
-        )
-
-        // Get Embeddings Instance
-        const embeddingConfig = JSON.parse(entity.embeddingConfig)
-        const embeddingObj = await _createEmbeddingsObject(
-            componentNodes,
-            { embeddingName: embeddingConfig.name, embeddingConfig: embeddingConfig.config },
-            options
-        )
-
-        // Get Vector Store Node Data
-        const vectorStoreConfig = JSON.parse(entity.vectorStoreConfig)
-        const vStoreNodeData = _createVectorStoreNodeData(
-            componentNodes,
-            { vectorStoreName: vectorStoreConfig.name, vectorStoreConfig: vectorStoreConfig.config },
-            embeddingObj,
-            recordManagerObj
-        )
-
-        // Get Vector Store Instance
-        const vectorStoreObj = await _createVectorStoreObject(
-            componentNodes,
-            { vectorStoreName: vectorStoreConfig.name, vectorStoreConfig: vectorStoreConfig.config },
-            vStoreNodeData
-        )
-        const idsToDelete: string[] = [] // empty ids because we get it dynamically from the record manager
-
-        // Call the delete method of the vector store
-        if (vectorStoreObj.vectorStoreMethods.delete) {
-            await vectorStoreObj.vectorStoreMethods.delete(vStoreNodeData, idsToDelete, options)
-        }
-    } catch (error) {
-        throw new InternalFlowiseError(
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            `Error: documentStoreServices.deleteVectorStoreFromStore - ${getErrorMessage(error)}`
-        )
-    }
-}
-
 const editDocumentStoreFileChunk = async (storeId: string, docId: string, chunkId: string, content: string, metadata: ICommonObject) => {
     try {
         const appServer = getRunningExpressApp()
@@ -567,7 +488,7 @@ const _normalizeFilePaths = async (appDataSource: DataSource, data: IDocumentSto
                     // find the file entry that has the same name as the file
                     const uploadedFile = currentLoader.files.find((uFile: IDocumentStoreLoaderFile) => uFile.name === file)
                     const mimePrefix = 'data:' + uploadedFile.mimePrefix + ';base64'
-                    const base64String = mimePrefix + ',' + bf.toString('base64') + `,filename:${file}`
+                    const base64String = mimePrefix + ',' + bf.toString('base64')
                     base64Files.push(base64String)
                 }
                 data.loaderConfig[keys[i]] = JSON.stringify(base64Files)
@@ -1599,7 +1520,7 @@ const upsertDocStore = async (
             }
 
             const mimePrefix = 'data:' + file.mimetype + ';base64'
-            const storagePath = mimePrefix + ',' + fileBuffer.toString('base64') + `,filename:${file.originalname}`
+            const storagePath = mimePrefix + ',' + fileBuffer.toString('base64')
 
             const fileInputFieldFromMimeType = mapMimeTypeToInputField(file.mimetype)
 
